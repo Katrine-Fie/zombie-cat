@@ -51,25 +51,25 @@ game.js      → game logic, levels, combat
 
 | Action | Inputs |
 |--------|--------|
-| Move | WASD / arrow keys |
-| Jump (double-jump) | Space |
-| Claw (melee) | **F** / left-click |
-| Fireball | **X** / right-click |
+| Move / wall climb | WASD / arrow keys |
+| Jump (hold for height, double-jump, coyote) | Space |
+| Claw slash | **F** / left-click |
+| Fireball | **X** / right-click (needs Fire Tail) |
 | Pause | ESC |
 
 **Character select**
 
-- **White Cat** — The Swift: fast runner  
-- **Red Cat** — The Brawler: stronger melee  
-- **Black Cat** — The Shadow: survival-oriented  
+- **White Cat** — The Swift: higher speed, dash trail, electric-blue eyes  
+- **Red Cat** — The Brawler: higher melee, flame paws, scar  
+- **Black Cat** — The Shadow: higher HP/defense, neon eyes, purple aura  
 
 **Gear (collected along the way)**
 
-- **Iron Claws** — melee  
-- **Fire Tail** — fireballs (limited ammo)  
-- **Ankh Shield** — protection  
+- **Iron Claws** — stronger melee (gold slash)  
+- **Fire Tail** — fireballs with limited ammo  
+- **Ankh Shield** — blue sphere, absorbs 3 hits  
 
-Gear is typically kept on stage retry, so progression feels fair for the target age group.
+Gear and HP carry within a run; stage retry keeps gear so progression stays fair for ages 8–10. Idle play is punished by chase / rising acid.
 
 ---
 
@@ -77,11 +77,11 @@ Gear is typically kept on stage retry, so progression feels fair for the target 
 
 | World | Focus | Boss |
 |-------|--------|------|
-| World 1 — Deserted Rooftops | Jumps, mice, Iron Claws | Zombie Cat |
-| World 2 — Toxic Sewers | Platforming, bats, Fire Tail | Armored Zombie Cat |
-| World 3 — Ancient Egyptian Tombs | Hazards, Ankh Shield | Pharaoh King |
+| World 1 — Deserted Rooftops | Auto-scroll, zombie chase, gaps, Iron Claws | Zombie Cat King (300 HP) |
+| World 2 — Toxic Sewers | Climb from rising acid, bats, Fire Tail | Armored Zombie Cat (500 HP) |
+| World 3 — Pharaoh's Tomb | Fast scroll, boulders/spikes, Ankh Shield | Ultimate Pharaoh King (800 HP, 3 phases) |
 
-Each world: **3 stages + 1 boss**. Objectives and the HUD guide the player (collect gear → find EXIT → boss).
+Each world: **3 stages + 1 boss** (HUD: `WORLD X - STAGE Y` / `WORLD X - BOSS`). Parallax backgrounds and vector-drawn characters — no emoji sprites.
 
 ---
 
