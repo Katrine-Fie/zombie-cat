@@ -8,6 +8,16 @@
   const W = 960;
   const H = 540;
   const TILE = 48;
+  const MAP_WIDTH = 3200;
+  const WORLD_HEIGHT = 720;
+  const LEVEL_TIMER_SEC = 45;
+  const FALL_Y = 650;
+  const SAFE_SPAWN = { x: 100, y: 400 };
+  const KEY_POS = { x: 2200, y: 250 };
+  const EXIT_X = 3000;
+
+  /** Level-scoped key progress (reset each stage) */
+  let hasKeyItem = false;
 
   const CATS = {
     white: {
@@ -219,6 +229,7 @@
       maxHp: cat.maxHp,
       score: 0,
       levelIndex: 0,
+      lives: 3,
       claws: false,
       fire: false,
       ammo: 0,
@@ -383,6 +394,16 @@
       gr.fillTriangle(2, 12, 10, 8, 10, 16);
       gr.fillTriangle(22, 12, 14, 8, 14, 16);
     }, 24, 24);
+
+    tex("keystar", (gr) => {
+      gr.fillStyle(0xffe066, 1);
+      gr.fillTriangle(18, 2, 12, 14, 24, 14);
+      gr.fillTriangle(18, 34, 12, 18, 24, 18);
+      gr.fillTriangle(2, 18, 14, 12, 14, 24);
+      gr.fillTriangle(34, 18, 22, 12, 22, 24);
+      gr.fillStyle(0xffffff, 0.9);
+      gr.fillCircle(18, 18, 5);
+    }, 36, 36);
 
     g.destroy();
   }
@@ -803,6 +824,7 @@
 
     init() {
       this.run = this.registry.get("run") || defaultRun("white");
+      if (this.run.lives == null) this.run.lives = 3;
       this.registry.set("run", this.run);
       this.level = LEVELS[this.run.levelIndex] || LEVELS[0];
       this.won = false;
@@ -815,12 +837,18 @@
       this.fireCd = 0;
       this.facing = 1;
       this.objectiveFlash = 0;
+      this.levelTimer = LEVEL_TIMER_SEC;
+      this.fallLockUntil = 0;
+      hasKeyItem = false;
     }
 
     create() {
       const L = this.level;
       this.physics.world.gravity.y = 1400;
-      this.physics.world.setBounds(0, 0, Math.max(W, L.length * TILE), Math.max(H, L.vertical ? L.length * TILE + 200 : H));
+      const worldH = L.vertical
+        ? Math.max(WORLD_HEIGHT, L.length * TILE + 240)
+        : WORLD_HEIGHT;
+      this.physics.world.setBounds(0, 0, MAP_WIDTH, worldH);
 
       this.platforms = this.physics.add.staticGroup();
       this.hazards = this.physics.add.staticGroup();
@@ -830,7 +858,10 @@
       this.projectiles = this.physics.add.group();
       this.enemyShots = this.physics.add.group();
 
+      this.playerSpawn = { x: SAFE_SPAWN.x, y: SAFE_SPAWN.y };
       this.buildWorld();
+      this.ensureCoreRoute();
+      this.playerSpawn = { x: SAFE_SPAWN.x, y: SAFE_SPAWN.y };
       this.spawnPlayer();
       this.setupInput();
       this.setupCollisions();
@@ -997,19 +1028,19 @@
     buildSideScroll(pk) {
       const L = this.level;
       const groundY = H - 36;
-      // Continuous-ish ground with gaps
+      const tileSpan = Math.ceil(MAP_WIDTH / TILE);
       let x = 0;
       const segments = [];
-      while (x < L.length) {
+      while (x < tileSpan - 4) {
         const len = Phaser.Math.Between(3, 6);
-        segments.push({ x, len });
+        segments.push({ x, len: Math.min(len, tileSpan - x) });
         x += len + Phaser.Math.Between(2, 3);
       }
-      // Ensure start platform
-      segments[0] = { x: 0, len: 5 };
+      segments[0] = { x: 0, len: 6 };
+      segments.push({ x: Math.floor(KEY_POS.x / TILE) - 1, len: 4 });
+      segments.push({ x: Math.floor(EXIT_X / TILE) - 2, len: 5 });
       segments.forEach((s, si) => {
         this.addPlatform(s.x * TILE, groundY, s.len, pk);
-        // floating platforms
         if (si > 0 && si % 2 === 0) {
           this.addPlatform(s.x * TILE + 40, groundY - 100 - (si % 3) * 30, 2, pk);
         }
@@ -1018,14 +1049,9 @@
         }
       });
 
-      // Exit at end
-      const last = segments[segments.length - 1];
-      const exitX = (last.x + last.len - 1) * TILE;
-      this.spawnExit(exitX, groundY - 50);
-
       // Gear
       if (L.gear) {
-        const mid = segments[Math.floor(segments.length / 2)];
+        const mid = segments[Math.min(3, segments.length - 1)];
         this.spawnGear(L.gear, mid.x * TILE + 60, groundY - 120);
       }
 
@@ -1033,6 +1059,7 @@
       segments.forEach((s, si) => {
         if (si === 0) return;
         const ex = s.x * TILE + (s.len * TILE) / 2;
+        if (ex > MAP_WIDTH - 160) return;
         const ey = groundY - 30;
         if (L.theme === "rooftop") {
           this.spawnEnemy(si % 2 === 0 ? "rat" : "zombie", ex, ey, 40);
@@ -1064,10 +1091,59 @@
         });
       }
 
-      // Secret optional upper route
       this.addPlatform(8 * TILE, groundY - 220, 3, pk);
       this.spawnPickup("secret", 8 * TILE + 60, groundY - 260);
       this.spawnPickup("mouse", 9 * TILE, groundY - 250);
+    }
+
+    /** Fixed key + exit + spawn platforms (exact design params) */
+    ensureCoreRoute() {
+      hasKeyItem = false;
+      const groundY = H - 36;
+      const pk = this.platKey();
+
+      // Safe spawn ledge
+      this.addPlatform(0, groundY, 7, pk);
+      this.addPlatform(SAFE_SPAWN.x - TILE, SAFE_SPAWN.y + 48, 4, pk);
+
+      // Key star platform + object at fixed position
+      this.addPlatform(KEY_POS.x - TILE, KEY_POS.y + 48, 4, pk);
+      this.spawnKeyStar(KEY_POS.x, KEY_POS.y);
+
+      // Exit portal at X: 3000 (replace any prior exit)
+      if (this.exit) {
+        this.exit.destroy();
+        this.exit = null;
+      }
+      this.addPlatform(EXIT_X - 2 * TILE, groundY, 6, pk);
+      this.spawnExit(EXIT_X, groundY - 50);
+
+      // Bridge toward exit on vertical themes so route is reachable
+      if (this.level.vertical) {
+        this.addPlatform(W - 40, groundY, Math.ceil((MAP_WIDTH - W) / TILE), pk);
+      }
+    }
+
+    spawnKeyStar(x, y) {
+      if (this.keyStar && this.keyStar.active) this.keyStar.destroy();
+      this.keyStar = this.pickups.create(x, y, "keystar");
+      this.keyStar.pickupType = "key";
+      this.keyStar.body.setAllowGravity(false);
+      this.tweens.add({
+        targets: this.keyStar,
+        y: y - 14,
+        angle: 360,
+        duration: 900,
+        yoyo: true,
+        repeat: -1,
+      });
+      this.add
+        .text(x, y - 40, "KEY", {
+          fontFamily: "Bangers",
+          fontSize: "16px",
+          color: "#ffe066",
+        })
+        .setOrigin(0.5);
     }
 
     buildVertical(pk) {
@@ -1102,7 +1178,6 @@
       if (L.gear) {
         this.spawnGear(L.gear, W / 2, 180);
       }
-      this.spawnExit(W / 2, 100);
 
       // side walls feel
       this.add.rectangle(10, worldH / 2, 20, worldH, 0x143028, 0.5).setScrollFactor(1);
@@ -1246,7 +1321,7 @@
 
     spawnPlayer() {
       const cat = CATS[this.run.catId];
-      const spawn = this.playerSpawn || { x: 100, y: H - 100 };
+      const spawn = this.playerSpawn || SAFE_SPAWN;
       this.player = this.physics.add.sprite(spawn.x, spawn.y, "cat_" + cat.id);
       this.player.setCollideWorldBounds(true);
       this.player.setDepth(10);
@@ -1269,14 +1344,11 @@
       });
       this.trail.setDepth(9);
 
-      if (this.level.vertical) {
-        this.cameras.main.setBounds(0, 0, W, this.physics.world.bounds.height);
-        this.cameras.main.startFollow(this.player, true, 0.1, 0.12);
-      } else {
-        this.cameras.main.setBounds(0, 0, this.physics.world.bounds.width, H);
-        this.cameras.main.startFollow(this.player, true, 0.1, 0.08);
-        this.cameras.main.setDeadzone(80, 60);
-      }
+      // Free camera left/right within X: 0 .. MAP_WIDTH (3200)
+      const worldH = this.physics.world.bounds.height;
+      this.cameras.main.setBounds(0, 0, MAP_WIDTH, worldH);
+      this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
+      this.cameras.main.setDeadzone(40, 40);
     }
 
     setupInput() {
@@ -1333,12 +1405,15 @@
       const panel = this.add.rectangle(W / 2, 28, W - 20, 48, 0x0a1018, 0.72).setStrokeStyle(1, 0xffc857, 0.35);
       this.hpText = this.add.text(20, 14, "", { fontFamily: "Exo 2", fontSize: "14px", color: "#ff5a6a", fontStyle: "bold" });
       this.scoreText = this.add.text(160, 14, "", { fontFamily: "Exo 2", fontSize: "14px", color: "#ffc857", fontStyle: "bold" });
+      this.livesText = this.add.text(300, 14, "", { fontFamily: "Exo 2", fontSize: "14px", color: "#ff8a9a", fontStyle: "bold" });
+      this.timerText = this.add.text(400, 14, "", { fontFamily: "Exo 2", fontSize: "14px", color: "#3dffb0", fontStyle: "bold" });
+      this.keyText = this.add.text(520, 14, "", { fontFamily: "Exo 2", fontSize: "14px", color: "#ffe066", fontStyle: "bold" });
       this.levelText = this.add.text(W / 2, 10, this.level.label, {
         fontFamily: "Bangers",
         fontSize: "18px",
         color: "#4ec8ff",
       }).setOrigin(0.5, 0);
-      this.objText = this.add.text(W / 2, 32, this.level.objective, {
+      this.objText = this.add.text(W / 2, 32, "Find KEY STAR → EXIT (45s)", {
         fontFamily: "Exo 2",
         fontSize: "12px",
         color: "#3dffb0",
@@ -1354,7 +1429,19 @@
       this.hpBarBg = this.add.rectangle(90, 40, 100, 8, 0x2a1010).setOrigin(0, 0.5);
       this.hpBar = this.add.rectangle(90, 40, 100, 8, 0xff5a6a).setOrigin(0, 0.5);
 
-      this.hud.add([panel, this.hpText, this.scoreText, this.levelText, this.objText, this.gearText, this.hpBarBg, this.hpBar]);
+      this.hud.add([
+        panel,
+        this.hpText,
+        this.scoreText,
+        this.livesText,
+        this.timerText,
+        this.keyText,
+        this.levelText,
+        this.objText,
+        this.gearText,
+        this.hpBarBg,
+        this.hpBar,
+      ]);
 
       // gear icons
       this.iconClaws = this.add.image(W - 150, 40, "gear_claws").setScale(0.7).setAlpha(0.25).setScrollFactor(0).setDepth(101);
@@ -1415,6 +1502,9 @@
       this.hpText.setText("HP");
       this.hpBar.scaleX = Phaser.Math.Clamp(r.hp / r.maxHp, 0, 1);
       this.scoreText.setText("SCORE " + r.score);
+      this.livesText.setText("LIVES " + (r.lives != null ? r.lives : 3));
+      this.timerText.setText("TIME " + Math.max(0, Math.ceil(this.levelTimer)));
+      this.keyText.setText(hasKeyItem ? "KEY ✓" : "KEY ✗");
       const gearBits = [];
       if (r.claws) gearBits.push("CLAWS");
       if (r.fire) gearBits.push("FIRE " + r.ammo);
@@ -1441,6 +1531,16 @@
     collectPickup(item) {
       if (!item.active) return;
       const r = this.run;
+      if (item.pickupType === "key") {
+        hasKeyItem = true;
+        this.floatText(item.x, item.y, "KEY GET!", "#ffe066");
+        this.objText.setText("Key secured! Reach the EXIT portal.");
+        this.cameras.main.flash(180, 255, 224, 102);
+        r.score += 150;
+        item.destroy();
+        this.refreshHUD();
+        return;
+      }
       if (item.pickupType === "fish") {
         r.hp = Math.min(r.maxHp, r.hp + 25);
         r.score += 50;
@@ -1460,16 +1560,16 @@
         if (item.gearType === "claws") {
           r.claws = true;
           this.floatText(item.x, item.y, "IRON CLAWS!", "#ffc857");
-          this.objText.setText("Iron Claws unlocked! Reach the EXIT.");
+          this.objText.setText("Iron Claws unlocked! Grab the KEY, then EXIT.");
         } else if (item.gearType === "fire") {
           r.fire = true;
           r.ammo += 8;
           this.floatText(item.x, item.y, "FIRE TAIL!", "#ff8a3d");
-          this.objText.setText("Fire Tail ready! EXIT is up top.");
+          this.objText.setText("Fire Tail ready! Grab the KEY, then EXIT.");
         } else if (item.gearType === "shield") {
           r.shield = 3;
           this.floatText(item.x, item.y, "ANKH SHIELD!", "#4ec8ff");
-          this.objText.setText("Shield online (3 hits)! Find the EXIT.");
+          this.objText.setText("Shield online! Grab the KEY, then EXIT.");
         }
         r.score += 500;
         this.cameras.main.shake(200, 0.01);
@@ -1510,18 +1610,51 @@
     }
 
     die() {
+      this.GameOver();
+    }
+
+    GameOver() {
+      if (this.dead) return;
       this.dead = true;
-      this.player.setTint(0x440000);
-      this.trail.stop();
+      if (this.player) {
+        this.player.setTint(0x440000);
+        this.player.setVelocity(0, 0);
+      }
+      if (this.trail) this.trail.stop();
       this.cameras.main.shake(400, 0.03);
       this.time.delayedCall(700, () => {
         this.scene.start("GameOver");
       });
     }
 
+    handleFallOff() {
+      if (this.dead || this.won) return;
+      if (this.time.now < this.fallLockUntil) return;
+      this.fallLockUntil = this.time.now + 500;
+
+      this.run.lives = Math.max(0, (this.run.lives || 0) - 1);
+      this.player.setVelocity(0, 0);
+      this.player.setPosition(SAFE_SPAWN.x, SAFE_SPAWN.y);
+      this.floatText(SAFE_SPAWN.x, SAFE_SPAWN.y - 40, "LIFE -1", "#ff5a6a");
+      this.invulnUntil = this.time.now + 1500;
+      this.refreshHUD();
+
+      if (this.run.lives <= 0) {
+        this.GameOver();
+      }
+    }
+
     tryClear() {
       if (this.won || this.dead) return;
       if (this.level.goal === "midBoss" || this.level.goal === "boss") return;
+
+      if (!hasKeyItem) {
+        this.player.setVelocityX(this.player.x > EXIT_X ? 180 : -180);
+        this.objText.setText("Need the KEY STAR first! (at X 2200)");
+        this.floatText(this.player.x, this.player.y - 40, "LOCKED — NEED KEY!", "#ff5a6a");
+        return;
+      }
+
       if (this.level.gear && this.level.gear === "claws" && !this.run.claws) {
         this.objText.setText("Grab Iron Claws first!");
         return;
@@ -1776,6 +1909,14 @@
         this.player.setAlpha(1);
       }
 
+      // 45s level timer
+      this.levelTimer -= dt / 1000;
+      if (this.levelTimer <= 0) {
+        this.levelTimer = 0;
+        this.GameOver();
+        return;
+      }
+
       // chase
       if (this.level.chase && this.chaseGroup) {
         this.chaseX += (this.level.chaseSpeed * dt) / 1000;
@@ -1801,10 +1942,13 @@
       // enemy AI
       this.enemies.getChildren().forEach((e) => this.updateEnemy(e, dt));
 
-      // fall death
-      if (this.player.y > this.physics.world.bounds.height + 40) {
-        this.hurt(999);
+      // Fall off platforms: Y > 650 → lose life, reset velocity, teleport to spawn
+      if (this.player.y > FALL_Y) {
+        this.handleFallOff();
       }
+
+      // Keep camera free within map bounds (follow already set; clamp player to map)
+      this.player.x = Phaser.Math.Clamp(this.player.x, 16, MAP_WIDTH - 16);
 
       this.refreshHUD();
     }
