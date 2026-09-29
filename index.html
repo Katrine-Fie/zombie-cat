@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zombie Cat</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Exo+2:wght@600;800&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="app">
+    <header class="top">
+      <h1 class="logo">Zombie Cat</h1>
+      <div id="hud" class="hud hidden">
+        <div class="hud-block">
+          <span class="label">HP</span>
+          <div class="bar"><div id="hp-fill" class="fill hp"></div></div>
+          <strong id="hud-hp-num">100</strong>
+        </div>
+        <div class="hud-block">Score <strong id="hud-score">0</strong></div>
+        <div class="inv" id="inv" title="Gear">
+          <div class="inv-slot" id="slot-claws" data-off="1">
+            <canvas width="28" height="28" id="icon-claws"></canvas><span>Claws</span>
+          </div>
+          <div class="inv-slot" id="slot-fire" data-off="1">
+            <canvas width="28" height="28" id="icon-fire"></canvas>
+            <span>Fireballs: <strong id="ammo-label">0</strong></span>
+          </div>
+          <div class="inv-slot" id="slot-shield" data-off="1">
+            <canvas width="28" height="28" id="icon-shield"></canvas>
+            <span>Shield <strong id="shield-label">0</strong></span>
+          </div>
+        </div>
+        <div class="hud-block progress" id="hud-level">World 1 - Stage 1</div>
+        <div class="hud-block objective" id="hud-objective">Jump the gaps — keep moving!</div>
+      </div>
+    </header>
+
+    <main class="stage">
+      <canvas id="game" width="960" height="540"></canvas>
+
+      <section id="screen-title" class="panel">
+        <p class="tagline">Three worlds. Nine stages. Three bosses. Keep moving or the chase wins.</p>
+        <button id="btn-start" class="btn">Choose Your Cat</button>
+        <p class="hint">Move WASD/Arrows · Jump Space (double-jump) · Claw F / Left-click · Fireball X / Right-click · ESC pause</p>
+      </section>
+
+      <section id="screen-select" class="panel hidden">
+        <h2>Pick Your Fighter</h2>
+        <div id="cat-grid" class="cat-grid"></div>
+        <button id="btn-begin" class="btn" disabled>Start Mission</button>
+      </section>
+
+      <section id="screen-pause" class="panel hidden">
+        <h2>Paused</h2>
+        <button id="btn-resume" class="btn">Resume</button>
+        <button id="btn-to-select" class="btn ghost">Change Cat</button>
+      </section>
+
+      <section id="screen-level" class="panel hidden">
+        <h2 id="level-title">Stage Clear!</h2>
+        <p id="level-text" class="tagline"></p>
+        <button id="btn-next" class="btn">Continue</button>
+      </section>
+
+      <section id="screen-lose" class="panel hidden">
+        <h2>Defeated…</h2>
+        <p class="tagline">The chase got you. Retry and keep your gear!</p>
+        <button id="btn-retry" class="btn">Retry Stage</button>
+        <button id="btn-lose-select" class="btn ghost">Change Cat</button>
+      </section>
+
+      <section id="screen-win" class="panel hidden">
+        <h2>Victory!</h2>
+        <p id="win-text" class="tagline"></p>
+        <button id="btn-replay" class="btn">Play Again / Select Character</button>
+      </section>
+    </main>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
