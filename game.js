@@ -657,10 +657,11 @@
       super("Select");
     }
     create() {
+      this.starting = false;
       this.add.rectangle(0, 0, W, H, 0x0a1018).setOrigin(0);
 
       this.add
-        .text(W / 2, 48, "PICK YOUR FIGHTER", {
+        .text(W / 2, 40, "PICK YOUR FIGHTER", {
           fontFamily: "Bangers, system-ui",
           fontSize: "48px",
           color: "#ffc857",
@@ -668,7 +669,7 @@
         .setOrigin(0.5);
 
       this.add
-        .text(W / 2, 92, "Click a cat — mission starts immediately!", {
+        .text(W / 2, 84, "Click a cat — mission starts immediately!", {
           fontFamily: "Exo 2, system-ui",
           fontSize: "16px",
           color: "#3dffb0",
@@ -681,70 +682,87 @@
       ids.forEach((id, i) => {
         const cat = CATS[id];
         const x = startX + i * 320;
-        const y = 280;
-        const card = this.add.container(x, y);
+        const y = 270;
 
-        const bg = this.add
-          .rectangle(0, 0, 260, 320, 0x121a28, 1)
-          .setStrokeStyle(3, cat.glow);
+        // Full-card hit target (rectangle is more reliable than container hit areas)
+        const hit = this.add
+          .rectangle(x, y, 270, 340, 0x121a28, 1)
+          .setStrokeStyle(3, cat.glow)
+          .setInteractive({ useHandCursor: true });
 
-        const sprite = this.add.image(0, -70, "cat_" + id).setScale(2.4);
-        const name = this.add
-          .text(0, 20, cat.name, {
+        const sprite = this.add.image(x, y - 90, "cat_" + id).setScale(2.4);
+        this.add
+          .text(x, y - 10, cat.name, {
             fontFamily: "Exo 2, system-ui",
             fontSize: "22px",
             color: "#ffffff",
             fontStyle: "800",
           })
           .setOrigin(0.5);
-        const role = this.add
-          .text(0, 48, cat.role, {
+        this.add
+          .text(x, y + 18, cat.role, {
             fontFamily: "Exo 2, system-ui",
             fontSize: "14px",
             color: Phaser.Display.Color.IntegerToColor(cat.glow).rgba,
           })
           .setOrigin(0.5);
-        const blurb = this.add
-          .text(0, 78, cat.blurb, {
+        this.add
+          .text(x, y + 48, cat.blurb, {
             fontFamily: "Exo 2, system-ui",
             fontSize: "13px",
             color: "#a9b0c4",
             align: "center",
-            wordWrap: { width: 220 },
+            wordWrap: { width: 230 },
           })
           .setOrigin(0.5);
 
-        const bars = this.add.container(0, 130);
         [
           ["SPD", cat.stats.spd, 0x4ec8ff],
           ["ATK", cat.stats.atk, 0xff8a3d],
           ["DEF", cat.stats.def, 0x3dffb0],
         ].forEach((row, ri) => {
-          const label = this.add
-            .text(-100, ri * 22, row[0], { fontSize: "12px", color: "#8b95a8", fontFamily: "Exo 2" })
+          const by = y + 95 + ri * 22;
+          this.add
+            .text(x - 100, by, row[0], {
+              fontSize: "12px",
+              color: "#8b95a8",
+              fontFamily: "Exo 2",
+            })
             .setOrigin(0, 0.5);
-          const track = this.add.rectangle(-40, ri * 22, 140, 10, 0x1a2438).setOrigin(0, 0.5);
-          const fill = this.add
-            .rectangle(-40, ri * 22, 140 * (row[1] / 100), 10, row[2])
+          this.add.rectangle(x - 40, by, 140, 10, 0x1a2438).setOrigin(0, 0.5);
+          this.add
+            .rectangle(x - 40, by, 140 * (row[1] / 100), 10, row[2])
             .setOrigin(0, 0.5);
-          bars.add([label, track, fill]);
         });
 
-        card.add([bg, sprite, name, role, blurb, bars]);
-        card.setSize(260, 320);
-        card.setInteractive({ useHandCursor: true });
+        const playBtn = this.add
+          .rectangle(x, y + 175, 160, 40, cat.glow, 1)
+          .setInteractive({ useHandCursor: true });
+        const playLbl = this.add
+          .text(x, y + 175, "PLAY", {
+            fontFamily: "Exo 2, system-ui",
+            fontSize: "18px",
+            color: "#0a1018",
+            fontStyle: "800",
+          })
+          .setOrigin(0.5);
 
         const startRun = () => this.launchCat(id);
 
-        card.on("pointerover", () => {
-          bg.setFillStyle(0x1a2840);
-          this.tweens.add({ targets: card, scale: 1.05, duration: 120 });
+        hit.on("pointerover", () => {
+          hit.setFillStyle(0x1a2840);
+          hit.setScale(1.03);
         });
-        card.on("pointerout", () => {
-          bg.setFillStyle(0x121a28);
-          this.tweens.add({ targets: card, scale: 1, duration: 120 });
+        hit.on("pointerout", () => {
+          hit.setFillStyle(0x121a28);
+          hit.setScale(1);
         });
-        card.on("pointerdown", startRun);
+        hit.on("pointerup", startRun);
+        playBtn.on("pointerup", startRun);
+        playLbl.setInteractive({ useHandCursor: true }).on("pointerup", startRun);
+
+        // Number keys also work without clicking
+        this.input.keyboard.on("keydown-" + ["ONE", "TWO", "THREE"][i], startRun);
 
         this.tweens.add({
           targets: sprite,
@@ -757,22 +775,23 @@
       });
 
       this.add
-        .text(W / 2, 510, "Click a card · or press 1 / 2 / 3 · Gear persists for the whole run", {
+        .text(W / 2, 520, "Click a card / PLAY · or press 1 / 2 / 3", {
           fontFamily: "Exo 2, system-ui",
           fontSize: "13px",
           color: "#5a6578",
         })
         .setOrigin(0.5);
-
-      this.input.keyboard.on("keydown-ONE", () => this.launchCat("white"));
-      this.input.keyboard.on("keydown-TWO", () => this.launchCat("red"));
-      this.input.keyboard.on("keydown-THREE", () => this.launchCat("black"));
     }
 
     launchCat(id) {
+      if (this.starting) return;
+      this.starting = true;
+      this.input.enabled = false;
       this.registry.set("run", defaultRun(id));
-      this.cameras.main.flash(200, 255, 200, 87);
-      this.time.delayedCall(100, () => this.scene.start("Play"));
+      this.cameras.main.flash(180, 255, 200, 87);
+      this.time.delayedCall(80, () => {
+        this.scene.start("Play");
+      });
     }
   }
 
