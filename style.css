@@ -71,12 +71,12 @@ body {
     0 0 0 1px rgba(255, 200, 87, 0.18),
     0 22px 60px rgba(0, 0, 0, 0.55);
   background: #000;
+  /* Let Phaser.Scale.FIT own canvas size — do NOT force CSS width/height on canvas */
 }
 
 #game-container canvas {
   display: block;
-  width: 100% !important;
-  height: auto !important;
+  margin: 0 auto;
 }
 
 .footer-hint {

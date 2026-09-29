@@ -21,6 +21,30 @@
   /** Level-scoped key progress (reset each stage) */
   let hasKeyItem = false;
 
+  // #region agent log
+  function dbgLog(hypothesisId, location, message, data, runId) {
+    const payload = {
+      sessionId: "a3524e",
+      runId: runId || "pre-fix",
+      hypothesisId,
+      location,
+      message,
+      data: data || {},
+      timestamp: Date.now(),
+    };
+    try {
+      const prev = JSON.parse(localStorage.getItem("zc_dbg_a3524e") || "[]");
+      prev.push(payload);
+      localStorage.setItem("zc_dbg_a3524e", JSON.stringify(prev.slice(-50)));
+    } catch (_) {}
+    fetch("http://127.0.0.1:7504/ingest/d74c61dd-5ce8-49f7-8d01-43a602efb376", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a3524e" },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  }
+  // #endregion
+
   const CATS = {
     white: {
       id: "white",
@@ -682,6 +706,23 @@
     create() {
       this.starting = false;
       this.add.rectangle(0, 0, W, H, 0x0a1018).setOrigin(0);
+      // #region agent log
+      const canvas = this.game.canvas;
+      const rect = canvas.getBoundingClientRect();
+      dbgLog("A", "SelectScene:create", "select screen + canvas metrics", {
+        gameW: W,
+        gameH: H,
+        canvasCssW: Math.round(rect.width),
+        canvasCssH: Math.round(rect.height),
+        canvasAttrW: canvas.width,
+        canvasAttrH: canvas.height,
+        scaleMode: this.scale.scaleMode,
+        displayScale: this.scale.displayScale && {
+          x: this.scale.displayScale.x,
+          y: this.scale.displayScale.y,
+        },
+      });
+      // #endregion
 
       this.add
         .text(W / 2, 40, "PICK YOUR FIGHTER", {
@@ -711,7 +752,8 @@
         const hit = this.add
           .rectangle(x, y, 270, 340, 0x121a28, 1)
           .setStrokeStyle(3, cat.glow)
-          .setInteractive({ useHandCursor: true });
+          .setInteractive({ useHandCursor: true })
+          .setDepth(5);
 
         const sprite = this.add.image(x, y - 90, "cat_" + id).setScale(2.4);
         this.add
@@ -760,7 +802,8 @@
 
         const playBtn = this.add
           .rectangle(x, y + 175, 160, 40, cat.glow, 1)
-          .setInteractive({ useHandCursor: true });
+          .setInteractive({ useHandCursor: true })
+          .setDepth(6);
         const playLbl = this.add
           .text(x, y + 175, "PLAY", {
             fontFamily: "Exo 2, system-ui",
@@ -768,24 +811,37 @@
             color: "#0a1018",
             fontStyle: "800",
           })
-          .setOrigin(0.5);
+          .setOrigin(0.5)
+          .setDepth(7);
 
-        const startRun = () => this.launchCat(id);
+        const startRun = (src) => {
+          // #region agent log
+          const p = this.input.activePointer;
+          dbgLog("B", "SelectScene:startRun", "cat click/key", {
+            id,
+            src: src || "unknown",
+            pointerX: p ? Math.round(p.x) : null,
+            pointerY: p ? Math.round(p.y) : null,
+            worldX: p ? Math.round(p.worldX) : null,
+            cardCenterX: x,
+            runId: "post-fix",
+          }, "post-fix");
+          // #endregion
+          this.launchCat(id);
+        };
 
         hit.on("pointerover", () => {
           hit.setFillStyle(0x1a2840);
-          hit.setScale(1.03);
         });
         hit.on("pointerout", () => {
           hit.setFillStyle(0x121a28);
-          hit.setScale(1);
         });
-        hit.on("pointerup", startRun);
-        playBtn.on("pointerup", startRun);
-        playLbl.setInteractive({ useHandCursor: true }).on("pointerup", startRun);
+        // pointerdown is more reliable than pointerup with scaled canvases
+        hit.on("pointerdown", () => startRun("hit"));
+        playBtn.on("pointerdown", () => startRun("playBtn"));
+        playLbl.setInteractive({ useHandCursor: true }).on("pointerdown", () => startRun("playLbl"));
 
-        // Number keys also work without clicking
-        this.input.keyboard.on("keydown-" + ["ONE", "TWO", "THREE"][i], startRun);
+        this.input.keyboard.on("keydown-" + ["ONE", "TWO", "THREE"][i], () => startRun("key" + (i + 1)));
 
         this.tweens.add({
           targets: sprite,
@@ -810,7 +866,14 @@
       if (this.starting) return;
       this.starting = true;
       this.input.enabled = false;
-      this.registry.set("run", defaultRun(id));
+      const run = defaultRun(id);
+      this.registry.set("run", run);
+      // #region agent log
+      dbgLog("B", "SelectScene:launchCat", "starting run", {
+        requestedId: id,
+        runCatId: run.catId,
+      });
+      // #endregion
       this.cameras.main.flash(180, 255, 200, 87);
       this.time.delayedCall(80, () => {
         this.scene.start("Play");
@@ -872,6 +935,16 @@
       this.setupCollisions();
       this.buildHUD();
       this.showIntro();
+      // #region agent log
+      dbgLog("B", "PlayScene:create", "play started", {
+        catId: this.run.catId,
+        level: this.level.id,
+        worldW: this.physics.world.bounds.width,
+        platCount: this.platforms.getLength(),
+        ledgeCount: this.ledges.getLength(),
+      });
+      this._wallLogAt = 0;
+      // #endregion
 
       this.safeUntil = this.time.now + 3000;
       document.addEventListener("contextmenu", this._blockMenu);
@@ -1025,10 +1098,10 @@
       const group = oneWay ? this.ledges : this.platforms;
       for (let i = 0; i < tiles; i++) {
         const p = group.create(x + i * TILE + TILE / 2, y, key || this.platKey());
-        // Thin top surface — reduces snagging on platform edges
+        // Thin top surface — refreshBody AFTER setSize for static bodies
+        p.body.setSize(TILE - 4, 10);
+        p.body.setOffset(2, 3);
         p.refreshBody();
-        p.body.setSize(TILE - 2, 12);
-        p.body.setOffset(1, 2);
         p.oneWay = oneWay;
       }
     }
@@ -1365,6 +1438,9 @@
       this.player.body.setSize(24, 34);
       this.player.body.setOffset(14, 12);
       this.player.setMaxVelocity(420, 900);
+      // Prevent invisible side-walls from platform edges (land on top only)
+      this.player.body.checkCollision.left = false;
+      this.player.body.checkCollision.right = false;
       this.playerMaxSpeed = cat.speed;
       this.playerJump = cat.jump;
       this.meleeDmg = cat.melee;
@@ -1920,6 +1996,33 @@
         this.facing = move;
         this.player.setFlipX(move < 0);
       }
+
+      // #region agent log
+      if (move === 1 && this.player.body.blocked.right && this.time.now > (this._wallLogAt || 0)) {
+        this._wallLogAt = this.time.now + 400;
+        const touching = [];
+        this.platforms.children.iterate((p) => {
+          if (!p || !p.body) return;
+          if (Phaser.Geom.Intersects.RectangleToRectangle(this.player.body, p.body)) {
+            touching.push({ g: "plat", x: Math.round(p.x), y: Math.round(p.y), tw: p.body.width, th: p.body.height });
+          }
+        });
+        this.ledges.children.iterate((p) => {
+          if (!p || !p.body) return;
+          if (Phaser.Geom.Intersects.RectangleToRectangle(this.player.body, p.body)) {
+            touching.push({ g: "ledge", x: Math.round(p.x), y: Math.round(p.y), tw: p.body.width, th: p.body.height });
+          }
+        });
+        dbgLog("C", "PlayScene:update", "blocked.right while moving right", {
+          x: Math.round(this.player.x),
+          y: Math.round(this.player.y),
+          vx: Math.round(this.player.body.velocity.x),
+          blocked: { ...this.player.body.blocked },
+          touching: touching.slice(0, 8),
+          catId: this.run.catId,
+        }, "post-fix");
+      }
+      // #endregion
 
       // climb ladders
       let onLadder = false;
