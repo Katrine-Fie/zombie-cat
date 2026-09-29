@@ -855,6 +855,7 @@
       this.physics.world.setBounds(0, 0, MAP_WIDTH, worldH);
 
       this.platforms = this.physics.add.staticGroup();
+      this.ledges = this.physics.add.staticGroup();
       this.hazards = this.physics.add.staticGroup();
       this.ladders = this.physics.add.staticGroup();
       this.pickups = this.physics.add.group();
@@ -1020,13 +1021,20 @@
       }
     }
 
-    addPlatform(x, y, tiles, key) {
+    addPlatform(x, y, tiles, key, oneWay = false) {
+      const group = oneWay ? this.ledges : this.platforms;
       for (let i = 0; i < tiles; i++) {
-        const p = this.platforms.create(x + i * TILE + TILE / 2, y, key || this.platKey());
+        const p = group.create(x + i * TILE + TILE / 2, y, key || this.platKey());
+        // Thin top surface — reduces snagging on platform edges
         p.refreshBody();
-        p.body.setSize(TILE, 16);
-        p.body.setOffset(0, 2);
+        p.body.setSize(TILE - 2, 12);
+        p.body.setOffset(1, 2);
+        p.oneWay = oneWay;
       }
+    }
+
+    addLedge(x, y, tiles, key) {
+      this.addPlatform(x, y, tiles, key, true);
     }
 
     buildSideScroll(pk) {
@@ -1046,10 +1054,10 @@
       segments.forEach((s, si) => {
         this.addPlatform(s.x * TILE, groundY, s.len, pk);
         if (si > 0 && si % 2 === 0) {
-          this.addPlatform(s.x * TILE + 40, groundY - 100 - (si % 3) * 30, 2, pk);
+          this.addLedge(s.x * TILE + 40, groundY - 100 - (si % 3) * 30, 2, pk);
         }
         if (si > 1 && L.theme === "rooftop" && si % 3 === 1) {
-          this.addPlatform(s.x * TILE + 20, groundY - 180, 2, pk);
+          this.addLedge(s.x * TILE + 20, groundY - 180, 2, pk);
         }
       });
 
@@ -1095,7 +1103,7 @@
         });
       }
 
-      this.addPlatform(8 * TILE, groundY - 220, 3, pk);
+      this.addLedge(8 * TILE, groundY - 220, 3, pk);
       this.spawnPickup("secret", 8 * TILE + 60, groundY - 260);
       this.spawnPickup("mouse", 9 * TILE, groundY - 250);
     }
@@ -1106,54 +1114,47 @@
       const groundY = H - 36;
       const pk = this.platKey();
 
-      // Continuous ground ribbon with small jumpable gaps only (max ~70px)
-      for (let x = 0; x < MAP_WIDTH; x += 220) {
-        const len = x + 180 < MAP_WIDTH ? 4 : 5;
-        this.addPlatform(x, groundY, len, pk);
+      // Solid ground path (full collision) — small gaps only
+      for (let x = 0; x < MAP_WIDTH; x += 200) {
+        this.addPlatform(x, groundY, 5, pk, false);
       }
-      // Fill critical spans solid so route never soft-locks
-      this.addPlatform(0, groundY, 8, pk);
-      this.addPlatform(KEY_POS.x - 200, groundY, 10, pk);
-      this.addPlatform(EXIT_X - 280, groundY, 12, pk);
+      this.addPlatform(0, groundY, 10, pk, false);
+      this.addPlatform(KEY_POS.x - 240, groundY, 12, pk, false);
+      this.addPlatform(EXIT_X - 320, groundY, 14, pk, false);
 
-      // Stairway up to KEY (steps ≤ MAX_STEP_UP so run + double-jump always works)
+      // One-way stairs to KEY (no side-walls — you can walk forward after landing)
       const keyTop = KEY_POS.y + 40;
       let stepY = groundY - MAX_STEP_UP;
-      let stepX = KEY_POS.x - 380;
-      while (stepY > keyTop + 8) {
-        this.addPlatform(stepX, stepY, 3, pk);
-        stepX += 70;
+      let stepX = KEY_POS.x - 420;
+      while (stepY >= keyTop) {
+        this.addLedge(stepX, stepY, 2, pk);
+        stepX += 110; // little/no horizontal overlap between steps
         stepY -= MAX_STEP_UP;
       }
-      this.addPlatform(KEY_POS.x - TILE * 2, keyTop, 5, pk);
+      this.addLedge(KEY_POS.x - TILE * 2, keyTop, 5, pk);
       this.spawnKeyStar(KEY_POS.x, KEY_POS.y);
 
-      // Stairway for mid-map gear / upper loot near X 900–1200
-      stepY = groundY - MAX_STEP_UP;
-      stepX = 820;
+      // Mid-map one-way stair for gear
       for (let i = 0; i < 3; i++) {
-        this.addPlatform(stepX + i * 90, stepY - i * MAX_STEP_UP, 3, pk);
+        this.addLedge(820 + i * 110, groundY - (i + 1) * MAX_STEP_UP, 2, pk);
       }
 
-      // Exit portal at X: 3000
       if (this.exit) {
         this.exit.destroy();
         this.exit = null;
       }
-      this.addPlatform(EXIT_X - 3 * TILE, groundY, 8, pk);
+      this.addPlatform(EXIT_X - 3 * TILE, groundY, 10, pk, false);
       this.spawnExit(EXIT_X, groundY - 50);
 
-      // Approach ramps before exit (in case of leftover gaps)
-      this.addPlatform(EXIT_X - 500, groundY - MAX_STEP_UP, 3, pk);
-      this.addPlatform(EXIT_X - 400, groundY - MAX_STEP_UP * 2, 3, pk);
+      this.addLedge(EXIT_X - 520, groundY - MAX_STEP_UP, 2, pk);
+      this.addLedge(EXIT_X - 400, groundY - MAX_STEP_UP * 2, 2, pk);
 
-      // Place stage gear on the mid stair (reachable)
       if (this.level.gear) {
-        this.spawnGear(this.level.gear, 820 + 180, groundY - MAX_STEP_UP * 2 - 40);
+        this.spawnGear(this.level.gear, 820 + 220, groundY - MAX_STEP_UP * 2 - 36);
       }
 
       if (this.level.vertical) {
-        this.addPlatform(40, groundY, Math.ceil(MAP_WIDTH / TILE), pk);
+        this.addPlatform(40, groundY, Math.ceil(MAP_WIDTH / TILE), pk, false);
       }
     }
 
@@ -1192,11 +1193,14 @@
         y -= Phaser.Math.Between(70, 100);
         const side = row % 2 === 0 ? 80 : W - 80 - 4 * TILE;
         const tiles = Phaser.Math.Between(3, 5);
-        this.addPlatform(side, y, tiles, pk);
+        this.addPlatform(side, y, tiles, pk, true); // one-way ledges when climbing
         // crates / ladders
         if (row % 2 === 1) {
-          const crate = this.platforms.create(side + 20, y - 28, "crate");
+          const crate = this.ledges.create(side + 20, y - 28, "crate");
           crate.refreshBody();
+          crate.body.setSize(36, 12);
+          crate.body.setOffset(2, 2);
+          crate.oneWay = true;
           const lad = this.ladders.create(side + tiles * TILE - 20, y - 40, "ladder");
           lad.refreshBody();
           lad.body.setSize(20, 48);
@@ -1219,10 +1223,10 @@
 
     buildArena(pk) {
       const groundY = H - 40;
-      this.addPlatform(0, groundY, Math.ceil(W / TILE), pk);
-      this.addPlatform(100, groundY - 120, 3, pk);
-      this.addPlatform(W - 100 - 3 * TILE, groundY - 120, 3, pk);
-      this.addPlatform(W / 2 - TILE, groundY - 200, 2, pk);
+      this.addPlatform(0, groundY, Math.ceil(W / TILE), pk, false);
+      this.addLedge(100, groundY - 120, 3, pk);
+      this.addLedge(W - 100 - 3 * TILE, groundY - 120, 3, pk);
+      this.addLedge(W / 2 - TILE, groundY - 200, 2, pk);
       this.spawnPickup("fish", W / 2, groundY - 240);
       this.spawnPickup("mouse", 150, groundY - 160);
 
@@ -1245,10 +1249,10 @@
 
     buildBossArena(pk) {
       const groundY = H - 40;
-      this.addPlatform(0, groundY, Math.ceil(W / TILE), pk);
-      this.addPlatform(80, groundY - 130, 2, pk);
-      this.addPlatform(W - 80 - 2 * TILE, groundY - 130, 2, pk);
-      this.addPlatform(W / 2 - TILE, groundY - 220, 2, pk);
+      this.addPlatform(0, groundY, Math.ceil(W / TILE), pk, false);
+      this.addLedge(80, groundY - 130, 2, pk);
+      this.addLedge(W - 80 - 2 * TILE, groundY - 130, 2, pk);
+      this.addLedge(W / 2 - TILE, groundY - 220, 2, pk);
 
       // torch glow sprites
       [100, W - 100, W / 2].forEach((tx, i) => {
@@ -1358,8 +1362,9 @@
       this.player = this.physics.add.sprite(spawn.x, spawn.y, "cat_" + cat.id);
       this.player.setCollideWorldBounds(true);
       this.player.setDepth(10);
-      this.player.body.setSize(28, 36);
-      this.player.body.setOffset(12, 10);
+      this.player.body.setSize(24, 34);
+      this.player.body.setOffset(14, 12);
+      this.player.setMaxVelocity(420, 900);
       this.playerMaxSpeed = cat.speed;
       this.playerJump = cat.jump;
       this.meleeDmg = cat.melee;
@@ -1412,8 +1417,30 @@
     }
 
     setupCollisions() {
+      // Solid ground — full collision
       this.physics.add.collider(this.player, this.platforms);
       this.physics.add.collider(this.enemies, this.platforms);
+      // One-way ledges — only land from above (fixes stuck after climbing stairs)
+      this.physics.add.collider(
+        this.player,
+        this.ledges,
+        null,
+        (player, ledge) => {
+          if (!player.body || !ledge.body) return false;
+          if (player.body.velocity.y < -20) return false; // jumping up through
+          return player.body.bottom <= ledge.body.top + 14;
+        }
+      );
+      this.physics.add.collider(
+        this.enemies,
+        this.ledges,
+        null,
+        (enemy, ledge) => {
+          if (!enemy.body || !ledge.body) return false;
+          if (enemy.body.velocity.y < 0) return false;
+          return enemy.body.bottom <= ledge.body.top + 14;
+        }
+      );
       this.physics.add.overlap(this.player, this.pickups, (_p, item) => this.collectPickup(item));
       this.physics.add.overlap(this.player, this.hazards, () => this.hurt(15, true));
       this.physics.add.overlap(this.player, this.enemies, (_p, e) => {
