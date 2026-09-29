@@ -12,9 +12,11 @@
   const WORLD_HEIGHT = 720;
   const LEVEL_TIMER_SEC = 45;
   const FALL_Y = 650;
-  const SAFE_SPAWN = { x: 100, y: 400 };
-  const KEY_POS = { x: 2200, y: 250 };
+  const SAFE_SPAWN = { x: 100, y: 450 };
+  const KEY_POS = { x: 2200, y: 320 };
   const EXIT_X = 3000;
+  /** Max vertical gap one jump can clear (~gravity 1200, jump ~560) */
+  const MAX_STEP_UP = 88;
 
   /** Level-scoped key progress (reset each stage) */
   let hasKeyItem = false;
@@ -28,8 +30,8 @@
       color: 0xf4f0e8,
       glow: 0x4ec8ff,
       eye: 0x5dffb0,
-      speed: 280,
-      jump: 520,
+      speed: 300,
+      jump: 580,
       melee: 14,
       maxHp: 100,
       defense: 0,
@@ -43,8 +45,8 @@
       color: 0xe84a3a,
       glow: 0xff8a3d,
       eye: 0xffd078,
-      speed: 230,
-      jump: 500,
+      speed: 250,
+      jump: 560,
       melee: 22,
       maxHp: 120,
       defense: 2,
@@ -58,8 +60,8 @@
       color: 0x1a1a22,
       glow: 0x3dffb0,
       eye: 0xff5a6a,
-      speed: 210,
-      jump: 490,
+      speed: 240,
+      jump: 550,
       melee: 16,
       maxHp: 150,
       defense: 5,
@@ -833,6 +835,8 @@
       this.invulnUntil = 0;
       this.canDouble = true;
       this.jumpHeld = false;
+      this.coyote = 0;
+      this.jumpBuffer = 0;
       this.clawCd = 0;
       this.fireCd = 0;
       this.facing = 1;
@@ -844,7 +848,7 @@
 
     create() {
       const L = this.level;
-      this.physics.world.gravity.y = 1400;
+      this.physics.world.gravity.y = 1200;
       const worldH = L.vertical
         ? Math.max(WORLD_HEIGHT, L.length * TILE + 240)
         : WORLD_HEIGHT;
@@ -1096,31 +1100,60 @@
       this.spawnPickup("mouse", 9 * TILE, groundY - 250);
     }
 
-    /** Fixed key + exit + spawn platforms (exact design params) */
+    /** Fixed key + exit + reachable stair routes (double-jump friendly) */
     ensureCoreRoute() {
       hasKeyItem = false;
       const groundY = H - 36;
       const pk = this.platKey();
 
-      // Safe spawn ledge
-      this.addPlatform(0, groundY, 7, pk);
-      this.addPlatform(SAFE_SPAWN.x - TILE, SAFE_SPAWN.y + 48, 4, pk);
+      // Continuous ground ribbon with small jumpable gaps only (max ~70px)
+      for (let x = 0; x < MAP_WIDTH; x += 220) {
+        const len = x + 180 < MAP_WIDTH ? 4 : 5;
+        this.addPlatform(x, groundY, len, pk);
+      }
+      // Fill critical spans solid so route never soft-locks
+      this.addPlatform(0, groundY, 8, pk);
+      this.addPlatform(KEY_POS.x - 200, groundY, 10, pk);
+      this.addPlatform(EXIT_X - 280, groundY, 12, pk);
 
-      // Key star platform + object at fixed position
-      this.addPlatform(KEY_POS.x - TILE, KEY_POS.y + 48, 4, pk);
+      // Stairway up to KEY (steps ≤ MAX_STEP_UP so run + double-jump always works)
+      const keyTop = KEY_POS.y + 40;
+      let stepY = groundY - MAX_STEP_UP;
+      let stepX = KEY_POS.x - 380;
+      while (stepY > keyTop + 8) {
+        this.addPlatform(stepX, stepY, 3, pk);
+        stepX += 70;
+        stepY -= MAX_STEP_UP;
+      }
+      this.addPlatform(KEY_POS.x - TILE * 2, keyTop, 5, pk);
       this.spawnKeyStar(KEY_POS.x, KEY_POS.y);
 
-      // Exit portal at X: 3000 (replace any prior exit)
+      // Stairway for mid-map gear / upper loot near X 900–1200
+      stepY = groundY - MAX_STEP_UP;
+      stepX = 820;
+      for (let i = 0; i < 3; i++) {
+        this.addPlatform(stepX + i * 90, stepY - i * MAX_STEP_UP, 3, pk);
+      }
+
+      // Exit portal at X: 3000
       if (this.exit) {
         this.exit.destroy();
         this.exit = null;
       }
-      this.addPlatform(EXIT_X - 2 * TILE, groundY, 6, pk);
+      this.addPlatform(EXIT_X - 3 * TILE, groundY, 8, pk);
       this.spawnExit(EXIT_X, groundY - 50);
 
-      // Bridge toward exit on vertical themes so route is reachable
+      // Approach ramps before exit (in case of leftover gaps)
+      this.addPlatform(EXIT_X - 500, groundY - MAX_STEP_UP, 3, pk);
+      this.addPlatform(EXIT_X - 400, groundY - MAX_STEP_UP * 2, 3, pk);
+
+      // Place stage gear on the mid stair (reachable)
+      if (this.level.gear) {
+        this.spawnGear(this.level.gear, 820 + 180, groundY - MAX_STEP_UP * 2 - 40);
+      }
+
       if (this.level.vertical) {
-        this.addPlatform(W - 40, groundY, Math.ceil((MAP_WIDTH - W) / TILE), pk);
+        this.addPlatform(40, groundY, Math.ceil(MAP_WIDTH / TILE), pk);
       }
     }
 
@@ -1649,9 +1682,13 @@
       if (this.level.goal === "midBoss" || this.level.goal === "boss") return;
 
       if (!hasKeyItem) {
-        this.player.setVelocityX(this.player.x > EXIT_X ? 180 : -180);
-        this.objText.setText("Need the KEY STAR first! (at X 2200)");
-        this.floatText(this.player.x, this.player.y - 40, "LOCKED — NEED KEY!", "#ff5a6a");
+        // Soft block — don't pin the player against the portal
+        if (this.player.body.velocity.x > 0) this.player.setVelocityX(-120);
+        this.objText.setText("Need the KEY STAR first! Climb the stairs at X 2200");
+        if (!this._keyWarnUntil || this.time.now > this._keyWarnUntil) {
+          this._keyWarnUntil = this.time.now + 900;
+          this.floatText(this.player.x, this.player.y - 40, "LOCKED — NEED KEY!", "#ff5a6a");
+        }
         return;
       }
 
@@ -1838,13 +1875,20 @@
     update(_t, dt) {
       if (this.dead || this.won || !this.player) return;
       const onGround = this.player.body.blocked.down || this.player.body.touching.down;
-      if (onGround) this.canDouble = true;
+      if (onGround) {
+        this.canDouble = true;
+        this.coyote = 8;
+      } else if (this.coyote > 0) {
+        this.coyote -= 1;
+      }
 
       // movement
       let move = 0;
       if (this.cursors.left.isDown || this.keys.A.isDown) move = -1;
       if (this.cursors.right.isDown || this.keys.D.isDown) move = 1;
-      this.player.setVelocityX(move * this.playerMaxSpeed);
+      // Slight air control boost so run-up into double-jump feels good
+      const airMul = onGround ? 1 : 0.92;
+      this.player.setVelocityX(move * this.playerMaxSpeed * airMul);
       if (move !== 0) {
         this.facing = move;
         this.player.setFlipX(move < 0);
@@ -1860,33 +1904,39 @@
       if (onLadder) {
         this.player.body.setAllowGravity(false);
         let vy = 0;
-        if (this.cursors.up.isDown || this.keys.W.isDown || this.keys.SPACE.isDown) vy = -160;
-        else if (this.cursors.down.isDown || this.keys.S.isDown) vy = 160;
+        if (this.cursors.up.isDown || this.keys.W.isDown || this.keys.SPACE.isDown) vy = -180;
+        else if (this.cursors.down.isDown || this.keys.S.isDown) vy = 180;
         this.player.setVelocityY(vy);
       } else {
         this.player.body.setAllowGravity(true);
       }
 
-      // variable jump
+      // Jump buffer + coyote + reliable double-jump (two quick hops)
       const jumpPressed =
         Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
         Phaser.Input.Keyboard.JustDown(this.keys.W) ||
         Phaser.Input.Keyboard.JustDown(this.keys.SPACE);
       const jumpDown = this.cursors.up.isDown || this.keys.W.isDown || this.keys.SPACE.isDown;
+      if (jumpPressed) this.jumpBuffer = 10;
+      if (this.jumpBuffer > 0) this.jumpBuffer -= 1;
 
-      if (jumpPressed && !onLadder) {
-        if (onGround) {
+      if (this.jumpBuffer > 0 && !onLadder) {
+        if (onGround || this.coyote > 0) {
           this.player.setVelocityY(-this.playerJump);
           this.jumpHeld = true;
+          this.coyote = 0;
+          this.jumpBuffer = 0;
+          this.canDouble = true;
         } else if (this.canDouble) {
           this.canDouble = false;
-          this.player.setVelocityY(-this.playerJump * 0.9);
+          this.player.setVelocityY(-this.playerJump * 0.95);
           this.jumpHeld = true;
+          this.jumpBuffer = 0;
           this.floatText(this.player.x, this.player.y, "DOUBLE!", "#4ec8ff");
         }
       }
-      if (this.jumpHeld && !jumpDown && this.player.body.velocity.y < -80) {
-        this.player.setVelocityY(this.player.body.velocity.y * 0.45);
+      if (this.jumpHeld && !jumpDown && this.player.body.velocity.y < -60) {
+        this.player.setVelocityY(this.player.body.velocity.y * 0.55);
         this.jumpHeld = false;
       }
       if (!jumpDown) this.jumpHeld = false;
