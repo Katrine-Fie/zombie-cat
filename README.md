@@ -1,17 +1,16 @@
 # Zombie Cat
 
-A browser action game for kids (~8–10): pick your cat, race through three worlds, collect gear — and outrun the chase.
+A browser action game for kids (~8–10): pick your cat, race through three worlds, collect remedies, and face the **Zombie Cat King**.
 
-**Play:** [Open `index.html`](./index.html) · **Repo:** [github.com/Katrine-Fie/zombie-cat](https://github.com/Katrine-Fie/zombie-cat)
-**Play live:** https://katrine-fie.github.io/zombie-cat/
+**Play live:** [katrine-fie.github.io/zombie-cat](https://katrine-fie.github.io/zombie-cat/) · **Repo:** [github.com/Katrine-Fie/zombie-cat](https://github.com/Katrine-Fie/zombie-cat)
 
 ---
 
 ## About the game
 
-**Zombie Cat** is an HTML5 Canvas prototype built with vanilla JavaScript. Players choose one of three cats (White, Red, Black), each with a distinct play style, then clear **3 worlds × 3 stages + boss** — 12 levels in total.
+**Zombie Cat** is built with **Phaser 3** (Arcade Physics, CDN — no build step). Players choose one of three cats, clear **distinct stages per world** (not one endless corridor), beat mid-bosses, collect gear, and finish in a 3-phase final boss fight.
 
-The loop is easy to grasp but keeps the pace high: jump gaps, fight threats, collect gear, and reach the EXIT before the chase catches you. World progression unlocks gear (Iron Claws, Fire Tail, Ankh Shield) and leads into world bosses.
+The fantasy is a **gear quest**: Iron Claws → Fire Tail → Ankh Shield → showdown with the King. Chase hordes and rising sludge force action — no idle wins.
 
 ---
 
@@ -19,96 +18,72 @@ The loop is easy to grasp but keeps the pace high: jump gaps, fight threats, col
 
 This prototype was created by a **Senior Product Leader** focused on moving from idea to a playable experience quickly — without a traditional production team.
 
-The workflow was **AI-native**:
-
-| Stage | Approach |
-|-------|----------|
-| Idea & scope | LLM-guided specification (audience, feature set, progression) |
-| Design → code | Iterative development in **Cursor** with AI-assisted implementation |
-| Refinement | Feedback loops with LLMs (including **Gemini**) to sharpen gameplay, structure, and polish |
-
-The outcome is a concrete, runnable prototype that shows how product leadership plus AI tools can shorten the path from brief to something you can play — a portfolio case for AI-accelerated product development.
+The workflow was **AI-native**: LLM-guided scope (audience, progression, fairness), iterative implementation in **Cursor**, and design refinement with models including **Gemini**. The result is a concrete portfolio piece for AI-accelerated product development.
 
 ---
 
 ## How to run
 
-No build step or install:
+No install or bundler:
 
 1. Clone or download the repo  
-2. Open `index.html` in a modern browser (Chrome, Edge, Firefox …)
+2. Open `index.html` in a modern browser, **or** use a simple static server (recommended)
 
 ```text
-index.html   → title screen
-style.css    → layout & UI
-game.js      → game logic, levels, combat
+index.html   → shell + Phaser 3 CDN
+style.css    → page chrome
+game.js      → all scenes, worlds, combat, HUD
 ```
 
-> Tip: If the browser restricts local files, serve the folder with a simple local server (e.g. Live Server in VS Code / Cursor).
+**GitHub Pages:** push to `main` — site updates at the URL above (may take a minute).
 
 ---
 
-## Controls & core gameplay
+## Controls
 
 | Action | Inputs |
 |--------|--------|
-| Move / wall climb | WASD / arrow keys |
-| Jump (hold for height, double-jump, coyote) | Space |
+| Move / climb | WASD / arrows |
+| Jump (hold for height, double-jump) | Space / W / Up |
 | Claw slash | **F** / left-click |
-| Fireball | **X** / right-click (needs Fire Tail) |
+| Fireball | **X** / right-click (needs Fire Tail + ammo) |
 | Pause | ESC |
 
-**Character select**
+**Cats** — click a card on the select screen to **start immediately**:
 
-- **White Cat** — The Swift: higher speed, dash trail, electric-blue eyes  
-- **Red Cat** — The Brawler: higher melee, flame paws, scar  
-- **Black Cat** — The Shadow: higher HP/defense, neon eyes, purple aura  
+- **White Swift** — high speed, dash trail  
+- **Red Brawler** — strongest melee  
+- **Black Shadow** — highest HP / defense  
 
-**Gear (collected along the way)**
+**Gear (persists for the run)**
 
-- **Iron Claws** — stronger melee (gold slash)  
-- **Fire Tail** — fireballs with limited ammo  
-- **Ankh Shield** — blue sphere, absorbs 3 hits  
+- **Iron Claws** (World 1) — stronger melee / gold slash  
+- **Fire Tail** (World 2) — fireballs; mice refill ammo  
+- **Ankh Shield** (World 3) — absorbs 3 hits  
 
-Gear and HP carry within a run; stage retry keeps gear so progression stays fair for ages 8–10. Idle play is punished by chase / rising acid.
+Fair for kids: 3s safe start, ~1.5s invulnerability after hits, Red Fish HP on safe platforms.
 
 ---
 
-## World structure (overview)
+## Worlds & stages
 
-| World | Focus | Boss |
-|-------|--------|------|
-| World 1 — Deserted Rooftops | Auto-scroll, zombie chase, gaps, Iron Claws | Zombie Cat King (300 HP) |
-| World 2 — Toxic Sewers | Climb from rising acid, bats, Fire Tail | Armored Zombie Cat (500 HP) |
-| World 3 — Pharaoh's Tomb | Fast scroll, boulders/spikes, Ankh Shield | Ultimate Pharaoh King (800 HP, 3 phases) |
+| World | Stages | Feel | Gear / climax |
+|-------|--------|------|----------------|
+| 1 Rooftops | Rainy chase → Neon alley → **Horde Captain** mid-boss | Neon night, gaps, rats | Iron Claws |
+| 2 Sewers | Pipe climb → Toxic reservoir → **Bat Matriarch** | Rising sludge, ladders | Fire Tail |
+| 3 Desert | Approach → Spike corridor → **Mummy Guard** | Boulders, spikes, mummy rats | Ankh Shield |
+| Final | Boss arena | Torch-lit tomb | **Zombie Cat King** (~900 HP, 3 phases) |
 
-Each world: **3 stages + 1 boss** (HUD: `WORLD X - STAGE Y` / `WORLD X - BOSS`). Parallax backgrounds and vector-drawn characters — no emoji sprites.
+Secrets (stars) and mice reward exploration. On-screen **quest objectives** keep the gear fantasy clear.
 
 ---
 
 ## Tech stack
 
-- **HTML5 Canvas** — rendering  
-- **Vanilla JavaScript** — game loop, input, level building, combat  
-- **CSS** — HUD, panels, typography  
-- No frameworks, bundlers, or backends — a deliberate choice for a fast prototype and easy sharing  
+- **Phaser 3.80** via jsDelivr CDN  
+- Arcade Physics, procedural/vector textures (no asset pipeline)  
+- Vanilla HTML/CSS shell for GitHub Pages  
 
 ---
 
-## Learnings & next steps
-
-**What this case shows**
-
-- A clear product brief (audience, loop, progression) can translate into a playable build with AI-assisted development  
-- Scope discipline (one clear loop: chase → gear → exit → boss) keeps the prototype focused  
-
-**Possible next steps**
-
-- Audio, tutorials, and stronger onboarding for younger players  
-- Balance tuning per cat and world  
-- Saved progress / high score  
-- Light deploy (GitHub Pages) for sharing without a download  
-
----
-
-*Zombie Cat — portfolio prototype · [GitHub](https://github.com/Katrine-Fie/zombie-cat)*
+*Zombie Cat — portfolio prototype · [Play](https://katrine-fie.github.io/zombie-cat/) · [GitHub](https://github.com/Katrine-Fie/zombie-cat)*
