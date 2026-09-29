@@ -3,7 +3,7 @@
 A browser action game for kids (~8–10): pick your cat, race through three worlds, collect gear — and outrun the chase.
 
 **Play:** [Open `index.html`](./index.html) · **Repo:** [github.com/Katrine-Fie/zombie-cat](https://github.com/Katrine-Fie/zombie-cat)
-https://katrine-fie.github.io/zombie-cat/
+**[Åbn AI Appen Live](https://katrine-fie.github.io/zombie-cat/)
 
 ---
 
